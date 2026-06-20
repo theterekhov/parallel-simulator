@@ -1,4 +1,4 @@
-use crate::{Resource, Strategy, SystemState, Thread, ThreadStatus};
+use crate::{Resource, Strategy, SystemState, Thread, ThreadStatus, strategy};
 
 pub struct Simulator {
     pub state: SystemState,
@@ -93,8 +93,13 @@ impl Simulator {
         self.check_sheduling_issues();
     }
 
-    fn find_or_activate_thread(&self) -> Option<usize> {
-        todo!()
+    fn find_or_activate_thread(&mut self) -> Option<usize> {
+        strategy::find_or_activate_thread(
+            &mut self.state.threads,
+            &self.state.strategy,
+            self.state.current_tick,
+            &mut self.state.event_log,
+        )
     }
 
     fn execute_step(&mut self, thread_idx: usize, action: &str, target: Option<String>) {
