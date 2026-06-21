@@ -286,8 +286,6 @@ impl Simulator {
         state.threads.iter().position(|t| t.id == owner_id)
     }
 
-    fn check_problem(&self) {}
-
     fn check_sheduling_issues(&mut self) {
         let tick = self.state.current_tick;
         let threshold = self.state.starvation_threshold;
