@@ -89,7 +89,7 @@ impl Simulator {
             }
         }
 
-        self.check_problem();
+        self.check_deadlock();
         self.check_sheduling_issues();
     }
 
@@ -213,12 +213,138 @@ impl Simulator {
         }
     }
 
-    fn check_problem(&self) -> () {
-        ()
+    pub fn check_deadlock(&mut self) {
+        let was_deadlocked = self.state.is_deadlocked;
+
+        let n = self.state.threads.len();
+        let mut visited = vec![false; n];
+        let mut in_stack = vec![false; n];
+
+        let mut deadlocked = false;
+
+        for start_idx in 0..n {
+            if !visited[start_idx] && self.state.threads[start_idx].status == ThreadStatus::Blocked
+            {
+                if Self::dfs_has_cycle(&self.state, start_idx, &mut visited, &mut in_stack) {
+                    deadlocked = true;
+                    break;
+                }
+            }
+        }
+
+        self.state.is_deadlocked = deadlocked;
+
+        if deadlocked && !was_deadlocked {
+            let tick = self.state.current_tick;
+
+            self.state.event_log.push(format!(
+                "[DEADLOCK] Такт {tick}: КРИТИЧЕСКАЯ ОШИБКА: Обнаружена взаимная блокировка"
+            ));
+        }
     }
 
-    fn check_sheduling_issues(&self) -> () {
-        ()
+    fn dfs_has_cycle(
+        state: &SystemState,
+        thread_idx: usize,
+        visited: &mut Vec<bool>,
+        in_stack: &mut Vec<bool>,
+    ) -> bool {
+        visited[thread_idx] = true;
+        in_stack[thread_idx] = true;
+
+        if let Some(next_idx) = Self::get_wait_for_idx(state, thread_idx) {
+            if !visited[next_idx] {
+                if Self::dfs_has_cycle(state, next_idx, visited, in_stack) {
+                    return true;
+                }
+            } else if in_stack[next_idx] {
+                return true;
+            }
+        }
+
+        in_stack[thread_idx] = false;
+        false
+    }
+
+    fn get_wait_for_idx(state: &SystemState, thread_idx: usize) -> Option<usize> {
+        let thread = &state.threads[thread_idx];
+
+        if thread.status != ThreadStatus::Blocked {
+            return None;
+        }
+
+        let step = thread.steps.get(thread.current_step_index)?;
+
+        if step.action != "lock" {
+            return None;
+        }
+
+        let res_id = step.target.as_ref()?.parse::<u32>().ok()?;
+        let res = state.resources.iter().find(|r| r.id == res_id)?;
+        let owner_id = *res.owners.first()?;
+
+        state.threads.iter().position(|t| t.id == owner_id)
+    }
+
+    fn check_problem(&self) {}
+
+    fn check_sheduling_issues(&mut self) {
+        let tick = self.state.current_tick;
+        let threshold = self.state.starvation_threshold;
+
+        for thread in &self.state.threads {
+            if thread.status != ThreadStatus::Blocked {
+                continue;
+            }
+
+            if let Some(wait_start) = thread.wait_start_tick {
+                let wait_duration = tick.saturating_sub(wait_start);
+
+                if wait_duration > threshold {
+                    self.state.event_log.push(format!(
+                        "[WARNING] Такт {tick}: Поток #{} голодание ({} тактов)",
+                        thread.id, wait_duration
+                    ));
+                }
+            }
+        }
+
+        for thread in &self.state.threads {
+            if thread.status != ThreadStatus::Blocked {
+                continue;
+            }
+
+            let high_prio = thread.priority;
+            let high_id = thread.id;
+
+            let waiting_res_id = thread
+                .steps
+                .get(thread.current_step_index)
+                .and_then(|s| {
+                    if s.action == "lock" {
+                        s.target.as_ref()
+                    } else {
+                        None
+                    }
+                })
+                .and_then(|t| t.parse::<u32>().ok());
+
+            if let Some(res_id) = waiting_res_id {
+                if let Some(res) = self.state.resources.iter().find(|r| r.id == res_id) {
+                    for owner_id in &res.owners {
+                        if let Some(owner) = self.state.threads.iter().find(|t| t.id == *owner_id) {
+                            if owner.priority < high_prio {
+                                self.state.event_log.push(format!(
+                                    "[WARNING] Такт {tick}: Инверсия! \
+                 Поток #{} (Prio: {}) ждет #{} (Prio: {})",
+                                    high_id, high_prio, owner.id, owner.priority
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
