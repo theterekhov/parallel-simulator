@@ -5,7 +5,16 @@ mod utils;
 use gloo_net::http::Request;
 use leptos::prelude::*;
 use simulator_core::Simulator;
+use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
+use wasm_bindgen_futures::spawn_local;
+
+use crate::components::{
+    config_panel::ConfigPanel, log_console::LogConsole, report::ReportModal,
+    simulation_canvas::SimulationCanvas, toast::ToastContainer,
+};
+use crate::models::{SimulationReport, Toast, ToastType, generate_report, push_toast};
+use crate::utils::generate_svg;
 
 fn App() -> impl IntoView {
     let tasks: RwSignal<Vec<String>> = RwSignal::new(vec![]);
@@ -16,6 +25,7 @@ fn App() -> impl IntoView {
 
     let task_title: RwSignal<String> = RwSignal::new(String::new());
     let task_desc: RwSignal<String> = RwSignal::new(String::new());
+    let error_msg: RwSignal<String> = RwSignal::new(String::new());
 
     provide_context(simulator);
     provide_context(is_auto_playing);
@@ -23,9 +33,10 @@ fn App() -> impl IntoView {
     provide_context(task_desc);
     provide_context(show_report);
     provide_context(toasts);
+    provide_context(error_msg);
 
     Effect::new(move |_| {
-        web_sys::js_sys::futures::spawn_local(async move {
+        spawn_local(async move {
             if let Ok(resp) = Request::get("/api/tasks").send().await {
                 if let Ok(list) = resp.json::<Vec<String>>().await {
                     tasks.set(list);
@@ -47,36 +58,40 @@ fn App() -> impl IntoView {
         interval_id.set(None);
 
         if playing {
-            let tick = Closure::wrap(Box::new(
-                (move || {
-                    simulator.update(|opt| {
-                        if let Some(sim) = opt {
-                            if !sim.is_finished() {
-                                sim.tick();
+            let sim_sig = simulator;
+            let play_sig = is_auto_playing;
+            let id_ref = interval_id;
+            let report_sig = show_report;
+            let toast_sig = toasts;
+
+            let tick = Closure::wrap(Box::new(move || {
+                sim_sig.update(|opt| {
+                    if let Some(sim) = opt {
+                        if !sim.is_finished() {
+                            sim.tick();
+                        } else {
+                            play_sig.set(false);
+                            report_sig.set(Some(generate_report(sim)));
+
+                            let msg = if sim.state.is_deadlocked {
+                                "Обнаружена взаимная блокировка!"
                             } else {
-                                is_auto_playing.set(false);
-                                show_report.set(Some(generate_report(sim)));
+                                "Симуляция успешно завершена"
+                            };
 
-                                let msg = if sim.state.is_deadlocked {
-                                    "Обнаружена взаимная блокировка!"
-                                } else {
-                                    "Симуляция успешно завершена"
-                                };
+                            let toast_type = if sim.state.is_deadlocked {
+                                ToastType::Warning
+                            } else {
+                                ToastType::Success
+                            };
 
-                                push_toast(
-                                    toasts,
-                                    msg,
-                                    if sim.state.is_deadlocked {
-                                        ToastType::Warning
-                                    } else {
-                                        ToastType::Success
-                                    },
-                                )
-                            }
+                            push_toast(toast_sig, msg, toast_type);
                         }
-                    });
-                }),
-            )) as Box<dyn FnMut()>;
+                    } else {
+                        play_sig.set(false);
+                    }
+                });
+            }) as Box<dyn FnMut()>);
 
             let window = web_sys::window().unwrap();
             let id = window
@@ -87,19 +102,9 @@ fn App() -> impl IntoView {
                 .unwrap();
 
             tick.forget();
-            interval_id.set(Some(id));
+            id_ref.set(Some(id));
         }
     });
-
-    let play_label = move || {
-        if is_auto_playing.get() {
-            "Пауза"
-        } else {
-            "Старт"
-        }
-    };
-    let can_play = move || simulator.with(|s| s.as_ref().map_or(false, |sim| !sim.is_finished()));
-    let can_reset = move || simulator.with(|s| s.is_some());
 
     let toggle_play = move || {
         is_auto_playing.update(|v| *v = !*v);
@@ -118,16 +123,76 @@ fn App() -> impl IntoView {
         simulator.set(None);
     };
 
+    Effect::new(move |_| {
+        let window = web_sys::window().unwrap();
+        let on_keydown = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+            match event.key().as_str() {
+                " " => {
+                    event.prevent_default();
+
+                    is_auto_playing.update(|v| *v = !*v);
+                }
+                "ArrowRight" => {
+                    event.prevent_default();
+
+                    simulator.update(|opt| {
+                        if let Some(sim) = opt {
+                            if !sim.is_finished() {
+                                sim.tick();
+                            }
+                        }
+                    });
+                }
+                "r" | "R" => {
+                    event.prevent_default();
+
+                    is_auto_playing.set(false);
+                    simulator.set(None);
+                }
+                _ => {}
+            }
+        }) as Box<dyn FnMut(_)>);
+
+        window
+            .add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref())
+            .unwrap();
+
+        on_cleanup(move || {
+            window
+                .remove_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref())
+                .unwrap();
+        });
+
+        on_keydown.forget();
+    });
+
+    let play_label = move || {
+        if is_auto_playing.get() {
+            "Пауза"
+        } else {
+            "Старт"
+        }
+    };
+    let can_play = move || simulator.with(|s| s.as_ref().map_or(false, |sim| !sim.is_finished()));
+    let can_step = move || {
+        !is_auto_playing.get()
+            && simulator.with(|s| s.as_ref().map_or(false, |sim| !sim.is_finished()))
+    };
+    let can_reset = move || simulator.with(|s| s.is_some());
+    let is_finished = move || simulator.with(|s| s.as_ref().map_or(false, |sim| sim.is_finished()));
+
     view! {
         <div class="app-root">
             <ToastContainer />
             <ReportModal />
 
             <header class="app-header">
+
                 <div>
-                    <div class="app-title">Симулятор параллельных вычислений</div>
+                    <div class="app-title">"Симулятор параллельных вычислений"</div>
                     <div class="app-subtitle">{move || task_desc.get()}</div>
-                 </div>
+                </div>
+
                  <div class="btn-group">
                      <button
                          class={move || if is_auto_playing.get() {"btn-ctrl btn-pause"} else {"btn-ctrl btn-play"}}
@@ -139,16 +204,19 @@ fn App() -> impl IntoView {
                       <button
                             class="btn-ctrl btn-step"
                             on:click=move |_| do_step()
+                            disabled=move || !can_step()
                       >
                       "Шаг ->"
                       </button>
                       <button
                             class="btn-ctrl btn-reset"
                             on:click=move |_| do_reset()
+                            disabled=move || !can_reset()
                       >
                       "Сброс"
                       </button>
                  </div>
+
             </header>
 
 
@@ -163,10 +231,6 @@ fn App() -> impl IntoView {
             </div>
         </div>
     }
-}
-
-fn generate_report(sim: &mut Simulator) -> _ {
-    todo!()
 }
 
 fn main() {
