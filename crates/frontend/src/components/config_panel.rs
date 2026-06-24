@@ -456,14 +456,14 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
                 </span>
             </div>
 
-            <input type="range" min="10" max="100" step="5"
+            <input type="range" min="1" max="100" step="1"
                 prop:value={move || simulator.with(|opt| opt.as_ref().map(|s| s.state.starvation_threshold).unwrap_or(20).to_string())}
                 on:input={move |ev| {
                     let val = ev.target().and_then(|t| t.dyn_into::<HtmlInputElement>().ok()).map(|i| i.value()).unwrap_or_default();
                     if let Ok(v) = val.parse::<u64>() {
                        simulator.update(|opt| {
                         if let Some(sim) = opt {
-                            sim.state.starvation_threshold = v;
+                            sim.state.starvation_threshold = v.clamp(1, u64::MAX);
                         }
                     });
                     }
