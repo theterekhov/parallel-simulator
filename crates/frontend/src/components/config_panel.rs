@@ -5,7 +5,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{Event, HtmlInputElement, HtmlSelectElement};
 
-use crate::models::{Toast, ToastType, download_json, push_toast};
+use crate::models::{
+    simulation_report::download_json,
+    toast::{Toast, ToastType, push_toast},
+};
 
 fn create_step(action: &str, target: Option<&str>, duration: u32) -> simulator_core::Step {
     simulator_core::Step {
@@ -46,7 +49,7 @@ fn create_semaphore(id: u32, capacity: usize) -> simulator_core::Resource {
 }
 
 #[component]
-pub fn ConfigPanel(tasks: RwSignal<Vec<String>>) -> impl IntoView {
+pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
     let simulator =
         use_context::<RwSignal<Option<Simulator>>>().expect("Контекст симулятора не найден");
     let is_auto_playing = use_context::<RwSignal<bool>>().expect("Контекст авто-режима не найден");
@@ -565,17 +568,18 @@ pub fn ConfigPanel(tasks: RwSignal<Vec<String>>) -> impl IntoView {
             <p class="panel-title">"Сценарии"</p>
             <ul class="task-list">
                 {move || {
-                    tasks.get().into_iter().map(|id| {
-                        let id_btn = id.clone();
-                        let load = load_task.clone();
-                        view! {
-                            <li>
+                    tasks.get().and_then(|list| list).unwrap_or_default().into_iter().map(|id| {
+                         let id_btn = id.clone();
+                           let load = load_task.clone();
+
+                     view! {
+                          <li>
                                 <button class="task-btn" on:click=move |_| load(id_btn.clone())>
-                                    {id.clone()}
-                                </button>
+                                   {id.clone()}
+                               </button>
                             </li>
-                        }
-                    }).collect::<Vec<_>>()
+                      }
+                     }).collect::<Vec<_>>()
                 }}
             </ul>
         </div>

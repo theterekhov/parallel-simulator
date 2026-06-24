@@ -1,23 +1,27 @@
-mod components;
-mod models;
-mod utils;
-
+use frontend::components::config_panel::ConfigPanel;
+use frontend::components::log_console::LogConsole;
+use frontend::components::report::ReportModal;
+use frontend::components::simulation_canvas::SimulationCanvas;
+use frontend::components::toast::ToastContainer;
+use frontend::models::simulation_report::{SimulationReport, generate_report};
+use frontend::models::toast::{Toast, ToastType, push_toast};
 use gloo_net::http::Request;
-use leptos::prelude::*;
+use leptos::{ev, prelude::*};
 use simulator_core::Simulator;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
-use wasm_bindgen_futures::spawn_local;
 
-use crate::components::{
-    config_panel::ConfigPanel, log_console::LogConsole, report::ReportModal,
-    simulation_canvas::SimulationCanvas, toast::ToastContainer,
-};
-use crate::models::{SimulationReport, Toast, ToastType, generate_report, push_toast};
-use crate::utils::generate_svg;
-
+#[component]
 fn App() -> impl IntoView {
-    let tasks: RwSignal<Vec<String>> = RwSignal::new(vec![]);
+    let tasks = LocalResource::new(|| async move {
+        Request::get("/api/tasks")
+            .send()
+            .await
+            .ok()?
+            .json::<Vec<String>>()
+            .await
+            .ok()
+    });
     let simulator: RwSignal<Option<Simulator>> = RwSignal::new(None);
     let is_auto_playing: RwSignal<bool> = RwSignal::new(false);
     let show_report: RwSignal<Option<SimulationReport>> = RwSignal::new(None);
@@ -35,20 +39,9 @@ fn App() -> impl IntoView {
     provide_context(toasts);
     provide_context(error_msg);
 
-    Effect::new(move |_| {
-        spawn_local(async move {
-            if let Ok(resp) = Request::get("/api/tasks").send().await {
-                if let Ok(list) = resp.json::<Vec<String>>().await {
-                    tasks.set(list);
-                }
-            }
-        });
-    });
-
     let interval_id = RwSignal::new(None);
 
-    Effect::new(move |prev| {
-        let _ = prev;
+    Effect::new(move || {
         let playing = is_auto_playing.get();
 
         if let Some(id) = interval_id.get_untracked() {
@@ -58,20 +51,14 @@ fn App() -> impl IntoView {
         interval_id.set(None);
 
         if playing {
-            let sim_sig = simulator;
-            let play_sig = is_auto_playing;
-            let id_ref = interval_id;
-            let report_sig = show_report;
-            let toast_sig = toasts;
-
             let tick = Closure::wrap(Box::new(move || {
-                sim_sig.update(|opt| {
+                simulator.update(|opt| {
                     if let Some(sim) = opt {
                         if !sim.is_finished() {
                             sim.tick();
                         } else {
-                            play_sig.set(false);
-                            report_sig.set(Some(generate_report(sim)));
+                            is_auto_playing.set(false);
+                            show_report.set(Some(generate_report(sim)));
 
                             let msg = if sim.state.is_deadlocked {
                                 "Обнаружена взаимная блокировка!"
@@ -85,10 +72,10 @@ fn App() -> impl IntoView {
                                 ToastType::Success
                             };
 
-                            push_toast(toast_sig, msg, toast_type);
+                            push_toast(toasts, msg, toast_type);
                         }
                     } else {
-                        play_sig.set(false);
+                        is_auto_playing.set(false);
                     }
                 });
             }) as Box<dyn FnMut()>);
@@ -102,7 +89,11 @@ fn App() -> impl IntoView {
                 .unwrap();
 
             tick.forget();
-            id_ref.set(Some(id));
+            interval_id.set(Some(id));
+
+            on_cleanup(move || {
+                window.clear_interval_with_handle(id);
+            });
         }
     });
 
@@ -124,46 +115,34 @@ fn App() -> impl IntoView {
     };
 
     Effect::new(move |_| {
-        let window = web_sys::window().unwrap();
-        let on_keydown = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-            match event.key().as_str() {
-                " " => {
-                    event.prevent_default();
-
-                    is_auto_playing.update(|v| *v = !*v);
-                }
-                "ArrowRight" => {
-                    event.prevent_default();
-
-                    simulator.update(|opt| {
-                        if let Some(sim) = opt {
-                            if !sim.is_finished() {
-                                sim.tick();
+        let handle =
+            window_event_listener(
+                ev::keydown,
+                move |event: web_sys::KeyboardEvent| match event.key().as_str() {
+                    " " => {
+                        event.prevent_default();
+                        is_auto_playing.update(|v| *v = !*v);
+                    }
+                    "ArrowRight" => {
+                        event.prevent_default();
+                        simulator.update(|opt| {
+                            if let Some(sim) = opt {
+                                if !sim.is_finished() {
+                                    sim.tick();
+                                }
                             }
-                        }
-                    });
-                }
-                "r" | "R" => {
-                    event.prevent_default();
+                        });
+                    }
+                    "r" | "R" => {
+                        event.prevent_default();
+                        is_auto_playing.set(false);
+                        simulator.set(None);
+                    }
+                    _ => {}
+                },
+            );
 
-                    is_auto_playing.set(false);
-                    simulator.set(None);
-                }
-                _ => {}
-            }
-        }) as Box<dyn FnMut(_)>);
-
-        window
-            .add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref())
-            .unwrap();
-
-        on_cleanup(move || {
-            window
-                .remove_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref())
-                .unwrap();
-        });
-
-        on_keydown.forget();
+        on_cleanup(move || handle.remove());
     });
 
     let play_label = move || {
@@ -179,7 +158,6 @@ fn App() -> impl IntoView {
             && simulator.with(|s| s.as_ref().map_or(false, |sim| !sim.is_finished()))
     };
     let can_reset = move || simulator.with(|s| s.is_some());
-    let is_finished = move || simulator.with(|s| s.as_ref().map_or(false, |sim| sim.is_finished()));
 
     view! {
         <div class="app-root">
@@ -235,8 +213,6 @@ fn App() -> impl IntoView {
 
 fn main() {
     console_error_panic_hook::set_once();
-
     tracing_wasm::set_as_global_default();
-
     leptos::mount::mount_to_body(App);
 }
