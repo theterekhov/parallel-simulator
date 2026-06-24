@@ -85,6 +85,7 @@ impl Simulator {
 
                 if self.state.threads[idx].status == ThreadStatus::Running {
                     self.state.threads[idx].status = ThreadStatus::Ready;
+                    self.state.threads[idx].last_ready_tick = self.state.current_tick;
                 }
             }
         }
@@ -206,6 +207,7 @@ impl Simulator {
             {
                 thread.status = ThreadStatus::Ready;
                 thread.wait_start_tick = None;
+                thread.last_ready_tick = tick;
 
                 let waked_id = thread.id;
 
