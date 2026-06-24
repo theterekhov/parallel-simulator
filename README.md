@@ -12,12 +12,6 @@
 - **backend** — HTTP-сервер на Axum, отдаёт статику и JSON-сценарии из `tasks/`.
 - **frontend** — SPA на Leptos (CSR), рисует SVG-граф ресурсов, цветной лог, панель конфигурации.
 
-```
-Browser (Leptos WASM)  ←→  Backend (Axum:3000)
-         ↕ WASM                      ↕
-  Simulator Core (DES)         tasks/*.json
-```
-
 ## Быстрый старт
 
 ```bash
