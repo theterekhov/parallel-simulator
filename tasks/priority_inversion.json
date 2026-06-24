@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "title": "Инверсия приоритетов",
+    "description": "3 потока с разными приоритетами конкурируют за 1 Mutex. Высокоприоритетный поток ждёт низкоприоритетного владельца — инверсия приоритетов."
+  },
+  "environment": { "threads": 3 },
+  "initial_state": {
+    "current_tick": 0,
+    "is_deadlocked": false,
+    "event_log": [],
+    "strategy": "CPthreads",
+    "starvation_threshold": 20,
+    "threads": [
+      {
+        "id": 1, "priority": 3, "status": "Ready", "current_step_index": 0,
+        "steps": [
+          { "action": "lock", "target": "1", "duration": 1 },
+          { "action": "compute", "target": null, "duration": 6 },
+          { "action": "unlock", "target": "1", "duration": 1 },
+          { "action": "lock", "target": "1", "duration": 1 },
+          { "action": "compute", "target": null, "duration": 6 },
+          { "action": "unlock", "target": "1", "duration": 1 }
+        ]
+      },
+      {
+        "id": 2, "priority": 2, "status": "Ready", "current_step_index": 0,
+        "steps": [
+          { "action": "lock", "target": "1", "duration": 1 },
+          { "action": "compute", "target": null, "duration": 4 },
+          { "action": "unlock", "target": "1", "duration": 1 }
+        ]
+      },
+      {
+        "id": 3, "priority": 1, "status": "Ready", "current_step_index": 0,
+        "steps": [
+          { "action": "lock", "target": "1", "duration": 1 },
+          { "action": "compute", "target": null, "duration": 10 },
+          { "action": "unlock", "target": "1", "duration": 1 }
+        ]
+      }
+    ],
+    "resources": [
+      { "id": 1, "res_type": "Mutex", "capacity": 1, "owners": [] }
+    ]
+  }
+}

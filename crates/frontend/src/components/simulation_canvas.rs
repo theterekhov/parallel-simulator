@@ -9,18 +9,16 @@ pub fn SimulationCanvas() -> impl IntoView {
 
     let svg_content = move || {
         simulator.with(|opt| {
-            opt.as_ref()
-                .map(|sim| generate_svg(sim))
-                .unwrap_or_else(|| {
-                    "<svg width=\"600\" height=\"400\" xmlns=\"http://www.w3.org/2000/svg\">\
+            opt.as_ref().map(generate_svg).unwrap_or_else(|| {
+                "<svg width=\"600\" height=\"400\" xmlns=\"http://www.w3.org/2000/svg\">\
 	                    <rect width=\"100%\" height=\"100%\" fill=\"#f8f9fa\"/>\
 	                    <text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".3em\" \
 	                        fill=\"#6c757d\" font-size=\"16\">\
 	                    Нет данных для визуализации\
 	                    </text>
 	                </svg>"
-                        .to_string()
-                })
+                    .to_string()
+            })
         })
     };
 

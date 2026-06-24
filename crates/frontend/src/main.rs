@@ -98,13 +98,30 @@ fn App() -> impl IntoView {
     });
 
     let toggle_play = move || {
-        is_auto_playing.update(|v| *v = !*v);
+        let finished = simulator.with(|opt| opt.as_ref().is_some_and(|s| s.is_finished()));
+        if !finished {
+            is_auto_playing.update(|v| *v = !*v);
+        }
     };
     let do_step = move || {
         simulator.update(|opt| {
-            if let Some(sim) = opt {
-                if !sim.is_finished() {
-                    sim.tick();
+            if let Some(sim) = opt
+                && !sim.is_finished()
+            {
+                sim.tick();
+                if sim.is_finished() {
+                    show_report.set(Some(generate_report(sim)));
+                    let msg = if sim.state.is_deadlocked {
+                        "Обнаружена взаимная блокировка!"
+                    } else {
+                        "Симуляция успешно завершена"
+                    };
+                    let toast_type = if sim.state.is_deadlocked {
+                        ToastType::Warning
+                    } else {
+                        ToastType::Success
+                    };
+                    push_toast(toasts, msg, toast_type);
                 }
             }
         });
@@ -125,13 +142,7 @@ fn App() -> impl IntoView {
                     }
                     "ArrowRight" => {
                         event.prevent_default();
-                        simulator.update(|opt| {
-                            if let Some(sim) = opt {
-                                if !sim.is_finished() {
-                                    sim.tick();
-                                }
-                            }
-                        });
+                        do_step();
                     }
                     "r" | "R" => {
                         event.prevent_default();
@@ -152,10 +163,10 @@ fn App() -> impl IntoView {
             "Старт"
         }
     };
-    let can_play = move || simulator.with(|s| s.as_ref().map_or(false, |sim| !sim.is_finished()));
+    let can_play = move || simulator.with(|s| s.as_ref().is_some_and(|sim| !sim.is_finished()));
     let can_step = move || {
         !is_auto_playing.get()
-            && simulator.with(|s| s.as_ref().map_or(false, |sim| !sim.is_finished()))
+            && simulator.with(|s| s.as_ref().is_some_and(|sim| !sim.is_finished()))
     };
     let can_reset = move || simulator.with(|s| s.is_some());
 

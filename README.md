@@ -12,15 +12,10 @@
 - **backend** — HTTP-сервер на Axum, отдаёт статику и JSON-сценарии из `tasks/`.
 - **frontend** — SPA на Leptos (CSR), рисует SVG-граф ресурсов, цветной лог, панель конфигурации.
 
-```
-Browser (Leptos WASM)  ←→  Backend (Axum:3000)
-         ↕ WASM                      ↕
-  Simulator Core (DES)         tasks/*.json
-```
-
 ## Быстрый старт
 
 ```bash
+
 # зависимости
 rustup target add wasm32-unknown-unknown
 cargo install trunk
@@ -28,6 +23,7 @@ cargo install trunk
 # сборка и запуск
 make run
 # → http://localhost:3000
+
 ```
 
 Для разработки в двух терминалах:
@@ -55,7 +51,7 @@ make dev-front  # frontend на :8080 (hot-reload)
 │           ├── models/        # toast, report
 │           ├── utils.rs       # generate_svg
 │           └── components/    # 5 UI-компонентов
-└── tasks/                     # 5 встроенных сценариев
+└── tasks/                     # 7 встроенных сценариев
 ```
 
 ## Стратегии планировщика
@@ -73,6 +69,8 @@ make dev-front  # frontend на :8080 (hot-reload)
 3. Производитель-потребитель — семафор capacity=3
 4. Читатели и писатели — семафор capacity=2
 5. Гонка за ресурс — 2 потока, 1 мьютекс
+6. Голодание потоков — 6 потоков, 1 мьютекс, высокая конкуренция
+7. Инверсия приоритетов — 3 потока с разными приоритетами
 
 ## API
 

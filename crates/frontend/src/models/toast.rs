@@ -1,4 +1,6 @@
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::closure::Closure;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ToastType {
@@ -24,6 +26,16 @@ pub fn push_toast(toasts: RwSignal<Vec<Toast>>, message: impl Into<String>, toas
     };
 
     toasts.update(|t| t.push(toast));
+
+    let window = web_sys::window().unwrap();
+    let closure = Closure::wrap(Box::new(move || {
+        toasts.update(|t| t.retain(|toast| toast.id != id));
+    }) as Box<dyn FnMut()>);
+    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+        closure.as_ref().unchecked_ref(),
+        4000,
+    );
+    closure.forget();
 }
 
 pub fn remove_toast(toasts: RwSignal<Vec<Toast>>, id: u64) {

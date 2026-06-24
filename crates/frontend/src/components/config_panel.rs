@@ -60,13 +60,12 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
 
     let gen_template = RwSignal::new(String::from("philosophers"));
     let gen_count = RwSignal::new(5_u32);
+    let starvation_threshold = RwSignal::new(20_u64);
 
     let load_task = move |id: String| {
         is_auto_playing.set(false);
         let task_title = task_title;
         let task_desc = task_desc;
-        let error_msg = error_msg;
-        let toasts = toasts;
         let id = id.clone();
 
         spawn_local(async move {
@@ -121,7 +120,9 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
             };
             error_msg.set(String::new());
 
-            simulator.set(Some(Simulator::from_state(state)));
+            let loaded_sim = Simulator::from_state(state);
+            starvation_threshold.set(loaded_sim.state.starvation_threshold);
+            simulator.set(Some(loaded_sim));
 
             push_toast(
                 toasts,
@@ -132,7 +133,6 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
     };
 
     let on_file_change = move |event: Event| {
-        let error_msg = error_msg;
         let Some(target) = event.target() else {
             return;
         };
@@ -140,124 +140,117 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
             return;
         };
         let files = input.files();
-        let toasts = toasts.clone();
 
-        if let Some(file_list) = files {
-            if let Some(file) = file_list.get(0) {
-                let is_auto_playing = is_auto_playing.clone();
-                let simulator = simulator.clone();
-                let input = input.clone();
-                let task_title = task_title;
-                let task_desc = task_desc;
-                let error_msg = error_msg;
-                let toasts = toasts.clone();
-                let file_name = file.name();
+        if let Some(file_list) = files
+            && let Some(file) = file_list.get(0)
+        {
+            let is_auto_playing = is_auto_playing;
+            let simulator = simulator;
+            let input = input.clone();
+            let task_title = task_title;
+            let task_desc = task_desc;
+            let file_name = file.name();
 
-                spawn_local(async move {
-                    let text_promise = file.text();
-                    let text_result = JsFuture::from(text_promise).await;
+            spawn_local(async move {
+                let text_promise = file.text();
+                let text_result = JsFuture::from(text_promise).await;
 
-                    match text_result {
-                        Ok(text_js) => {
-                            if let Some(text) = text_js.as_string() {
-                                match serde_json::from_str::<serde_json::Value>(&text) {
-                                    Ok(json) => {
-                                        let validate_resp = Request::post("/api/tasks/validate")
-                                            .json(&json)
-                                            .unwrap()
-                                            .send()
-                                            .await;
+                match text_result {
+                    Ok(text_js) => {
+                        if let Some(text) = text_js.as_string() {
+                            match serde_json::from_str::<serde_json::Value>(&text) {
+                                Ok(json) => {
+                                    let validate_resp = Request::post("/api/tasks/validate")
+                                        .json(&json)
+                                        .unwrap()
+                                        .send()
+                                        .await;
 
-                                        if let Ok(resp) = validate_resp {
-                                            if !resp.ok() {
-                                                error_msg.set(
-                                                    "Сервер отклонил файл: неверный формат"
-                                                        .to_string(),
-                                                );
-
-                                                push_toast(
-                                                    toasts,
-                                                    "Неверный формат файла",
-                                                    ToastType::Error,
-                                                );
-
-                                                return;
-                                            }
-                                        }
-
-                                        if let Some(state_val) = json.get("initial_state") {
-                                            if let Ok(state) = serde_json::from_value::<SystemState>(
-                                                state_val.clone(),
-                                            ) {
-                                                if let Some(meta) = json.get("metadata") {
-                                                    task_title.set(
-                                                        meta.get("title")
-                                                            .and_then(|v| v.as_str())
-                                                            .unwrap_or("")
-                                                            .to_string(),
-                                                    );
-
-                                                    task_desc.set(
-                                                        meta.get("description")
-                                                            .and_then(|v| v.as_str())
-                                                            .unwrap_or("")
-                                                            .to_string(),
-                                                    );
-
-                                                    error_msg.set(String::new());
-                                                    is_auto_playing.set(false);
-
-                                                    simulator
-                                                        .set(Some(Simulator::from_state(state)));
-
-                                                    push_toast(
-                                                        toasts,
-                                                        format!("Файл \"{}\" загружен", file_name),
-                                                        ToastType::Success,
-                                                    )
-                                                }
-                                            } else {
-                                                error_msg.set("Ошибка загрузки файла".to_string());
-
-                                                push_toast(
-                                                    toasts,
-                                                    "Ошибка загрузки файла",
-                                                    ToastType::Error,
-                                                );
-                                            }
-                                        } else {
-                                            error_msg
-                                                .set("Отсутствует \"initial_state\"".to_string());
-
-                                            push_toast(
-                                                toasts,
-                                                "Ошибка: отсутствует \"initial_state\"",
-                                                ToastType::Error,
-                                            );
-                                        }
-                                    }
-                                    Err(_) => {
-                                        error_msg.set("Ошибка парсинга JSON".to_string());
+                                    if let Ok(resp) = validate_resp
+                                        && !resp.ok()
+                                    {
+                                        error_msg.set(
+                                            "Сервер отклонил файл: неверный формат".to_string(),
+                                        );
 
                                         push_toast(
                                             toasts,
-                                            "Ошибка парсинга JSON",
+                                            "Неверный формат файла",
+                                            ToastType::Error,
+                                        );
+
+                                        return;
+                                    }
+
+                                    if let Some(state_val) = json.get("initial_state") {
+                                        if let Ok(state) =
+                                            serde_json::from_value::<SystemState>(state_val.clone())
+                                        {
+                                            if let Some(meta) = json.get("metadata") {
+                                                task_title.set(
+                                                    meta.get("title")
+                                                        .and_then(|v| v.as_str())
+                                                        .unwrap_or("")
+                                                        .to_string(),
+                                                );
+
+                                                task_desc.set(
+                                                    meta.get("description")
+                                                        .and_then(|v| v.as_str())
+                                                        .unwrap_or("")
+                                                        .to_string(),
+                                                );
+
+                                                error_msg.set(String::new());
+                                                is_auto_playing.set(false);
+
+                                                let imported_sim = Simulator::from_state(state);
+                                                starvation_threshold
+                                                    .set(imported_sim.state.starvation_threshold);
+                                                simulator.set(Some(imported_sim));
+
+                                                push_toast(
+                                                    toasts,
+                                                    format!("Файл \"{}\" загружен", file_name),
+                                                    ToastType::Success,
+                                                )
+                                            }
+                                        } else {
+                                            error_msg.set("Ошибка загрузки файла".to_string());
+
+                                            push_toast(
+                                                toasts,
+                                                "Ошибка загрузки файла",
+                                                ToastType::Error,
+                                            );
+                                        }
+                                    } else {
+                                        error_msg.set("Отсутствует \"initial_state\"".to_string());
+
+                                        push_toast(
+                                            toasts,
+                                            "Ошибка: отсутствует \"initial_state\"",
                                             ToastType::Error,
                                         );
                                     }
                                 }
+                                Err(_) => {
+                                    error_msg.set("Ошибка парсинга JSON".to_string());
+
+                                    push_toast(toasts, "Ошибка парсинга JSON", ToastType::Error);
+                                }
                             }
                         }
-                        Err(_) => {
-                            error_msg.set("Ошибка чтения файла".to_string());
-
-                            push_toast(toasts, "Ошибка чтения файла", ToastType::Error);
-                        }
                     }
+                    Err(_) => {
+                        error_msg.set("Ошибка чтения файла".to_string());
 
-                    input.set_value("");
-                });
-            }
+                        push_toast(toasts, "Ошибка чтения файла", ToastType::Error);
+                    }
+                }
+
+                input.set_value("");
+            });
         }
     };
 
@@ -286,10 +279,9 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
     let on_strategy_change = move |event: Event| {
         let target = event
             .target()
-            .unwrap()
-            .dyn_into::<HtmlSelectElement>()
-            .unwrap();
-        let value = target.value();
+            .and_then(|t| t.dyn_into::<HtmlSelectElement>().ok());
+
+        let value = target.map(|t| t.value()).unwrap_or_default();
 
         simulator.update(|opt| {
             if let Some(sim) = opt {
@@ -305,8 +297,8 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
     let on_generate = move |_| {
         let n = gen_count.get();
         let template = gen_template.get();
-        let is_auto = is_auto_playing.clone();
-        let sim = simulator.clone();
+        let is_auto = is_auto_playing;
+        let sim = simulator;
 
         let mut resources = Vec::new();
         let mut threads = Vec::new();
@@ -406,17 +398,84 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
                     ],
                 ));
             }
+        } else if template == "starvation" {
+            task_title.set(format!("Голодание потоков ({} пот.)", n));
+            task_desc.set("Высокая конкуренция за 1 Mutex - длительное ожидание.".to_string());
+
+            resources.push(create_mutex(1));
+            for i in 1..=n {
+                threads.push(create_thread(
+                    i,
+                    vec![
+                        create_step("compute", None, 2),
+                        create_step("lock", Some("1"), 1),
+                        create_step("compute", None, 8),
+                        create_step("unlock", Some("1"), 1),
+                    ],
+                ));
+            }
+        } else if template == "inversion" {
+            task_title.set("Инверсия приоритетов (3 потока)".to_string());
+            task_desc.set("Разные приоритеты, 1 Mutex - high-prio ждёт low-prio.".to_string());
+
+            resources.push(create_mutex(1));
+            threads.push(simulator_core::Thread {
+                id: 1,
+                priority: 3,
+                status: simulator_core::ThreadStatus::Ready,
+                current_step_index: 0,
+                wait_start_tick: None,
+                last_ready_tick: 0,
+                steps: vec![
+                    create_step("lock", Some("1"), 1),
+                    create_step("compute", None, 6),
+                    create_step("unlock", Some("1"), 1),
+                    create_step("lock", Some("1"), 1),
+                    create_step("compute", None, 6),
+                    create_step("unlock", Some("1"), 1),
+                ],
+            });
+            threads.push(simulator_core::Thread {
+                id: 2,
+                priority: 2,
+                status: simulator_core::ThreadStatus::Ready,
+                current_step_index: 0,
+                wait_start_tick: None,
+                last_ready_tick: 0,
+                steps: vec![
+                    create_step("lock", Some("1"), 1),
+                    create_step("compute", None, 4),
+                    create_step("unlock", Some("1"), 1),
+                ],
+            });
+            threads.push(simulator_core::Thread {
+                id: 3,
+                priority: 1,
+                status: simulator_core::ThreadStatus::Ready,
+                current_step_index: 0,
+                wait_start_tick: None,
+                last_ready_tick: 0,
+                steps: vec![
+                    create_step("lock", Some("1"), 1),
+                    create_step("compute", None, 10),
+                    create_step("unlock", Some("1"), 1),
+                ],
+            });
         }
 
         is_auto.set(false);
         error_msg.set(String::new());
-        sim.set(Some(Simulator::new(threads, resources)));
+        let mut sim_instance = Simulator::new(threads, resources);
+        sim_instance.state.starvation_threshold = starvation_threshold.get();
+        sim.set(Some(sim_instance));
 
         let template_name = match template.as_str() {
             "philosophers" => "Обедающие философы",
             "race" => "Состояние гонки",
             "producer" => "Производитель-потребитель",
             "readers" => "Читатели и писатели",
+            "starvation" => "Голодание потоков",
+            "inversion" => "Инверсия приоритетов",
             _ => "Сценарий",
         };
 
@@ -452,20 +511,21 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-size: 0.8rem; color: var(--muted);">"Порог голодания:"</span>
                 <span style="font-size: 0.8rem; font-weight: bold; color: var(--text);">
-                    {move || simulator.with(|opt| opt.as_ref().map(|s| s.state.starvation_threshold).unwrap_or(20))}
+                    {move || starvation_threshold.get()}
                 </span>
             </div>
 
-            <input type="range" min="10" max="100" step="5"
-                prop:value={move || simulator.with(|opt| opt.as_ref().map(|s| s.state.starvation_threshold).unwrap_or(20).to_string())}
+            <input type="range" min="1" max="100" step="1"
+                prop:value={move || starvation_threshold.get().to_string()}
                 on:input={move |ev| {
                     let val = ev.target().and_then(|t| t.dyn_into::<HtmlInputElement>().ok()).map(|i| i.value()).unwrap_or_default();
                     if let Ok(v) = val.parse::<u64>() {
-                       simulator.update(|opt| {
-                        if let Some(sim) = opt {
-                            sim.state.starvation_threshold = v;
-                        }
-                    });
+                        starvation_threshold.set(v.clamp(1, u64::MAX));
+                        simulator.update(|opt| {
+                            if let Some(sim) = opt {
+                                sim.state.starvation_threshold = v.clamp(1, u64::MAX);
+                            }
+                        });
                     }
                 }}
                 style="width: 100%; margin-bottom: 15px;"
@@ -509,6 +569,8 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
                 <option value="race">"Гонка за ресурс"</option>
                 <option value="producer">"Производитель-потребитель"</option>
                 <option value="readers">"Читатели и писатели"</option>
+                <option value="starvation">"Голодание потоков"</option>
+                <option value="inversion">"Инверсия приоритетов"</option>
             </select>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -570,7 +632,7 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
                 {move || {
                     tasks.get().and_then(|list| list).unwrap_or_default().into_iter().map(|id| {
                          let id_btn = id.clone();
-                           let load = load_task.clone();
+                           let load = load_task;
 
                      view! {
                           <li>

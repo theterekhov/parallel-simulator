@@ -39,7 +39,7 @@ pub fn generate_report(sim: &Simulator) -> SimulationReport {
 
     SimulationReport {
         status,
-        total_ticks: state.current_tick as u64,
+        total_ticks: state.current_tick,
         threads_completed,
         threads_total,
         deadlock_detected: state.is_deadlocked,
@@ -85,35 +85,53 @@ pub fn download_report(log: &[String]) {
     web_sys::Url::revoke_object_url(&url).unwrap();
 }
 
-pub fn download_json(json_str: &str, filename: &str) {
+fn download_blob(content: &str, mime: &str, filename: &str) {
     let parts = web_sys::js_sys::Array::new();
-    parts.push(&wasm_bindgen::JsValue::from_str(json_str));
+    parts.push(&wasm_bindgen::JsValue::from_str(content));
 
     let opts = web_sys::BlobPropertyBag::new();
-    opts.set_type("application/json;charset=utf-8");
+    opts.set_type(mime);
 
-    let blob = web_sys::Blob::new_with_str_sequence_and_options(&parts, &opts)
-        .expect("Не удалось создать Blob");
+    let blob = web_sys::Blob::new_with_str_sequence_and_options(&parts, &opts);
+    let blob = match blob {
+        Ok(b) => b,
+        Err(_) => return,
+    };
 
-    let url =
-        web_sys::Url::create_object_url_with_blob(&blob).expect("Не удалось создать object URL");
+    let url = web_sys::Url::create_object_url_with_blob(&blob);
+    let url = match url {
+        Ok(u) => u,
+        Err(_) => return,
+    };
 
-    let document = web_sys::window()
-        .expect("Нет window")
-        .document()
-        .expect("Нет document");
+    let document = match web_sys::window().and_then(|w| w.document()) {
+        Some(d) => d,
+        None => return,
+    };
 
-    let anchor = document
-        .create_element("a")
-        .expect("Не удалось создать элемент \"a\"")
-        .dyn_into::<web_sys::HtmlAnchorElement>()
-        .expect("Не HtmlAnchorElement");
+    let anchor = match document.create_element("a") {
+        Ok(el) => match el.dyn_into::<web_sys::HtmlAnchorElement>() {
+            Ok(a) => a,
+            Err(_) => return,
+        },
+        Err(_) => return,
+    };
 
     anchor.set_href(&url);
     anchor.set_download(filename);
-    anchor.click();
+    anchor.style().set_css_text("display: none;");
 
-    web_sys::Url::revoke_object_url(&url).unwrap();
+    if let Some(body) = document.body() {
+        let _ = body.append_child(&anchor);
+        anchor.click();
+        let _ = body.remove_child(&anchor);
+    }
+
+    let _ = web_sys::Url::revoke_object_url(&url);
+}
+
+pub fn download_json(json_str: &str, filename: &str) {
+    download_blob(json_str, "application/json;charset=utf-8", filename);
 }
 
 pub fn download_csv(log: &[String]) {
@@ -121,12 +139,11 @@ pub fn download_csv(log: &[String]) {
 
     for entry in log {
         let (tick, msg) = if let (Some(a), Some(b)) = (entry.find("Такт "), entry.find(": ")) {
-            let tick_str = entry[a + 5..b]
-                .split_whitespace()
-                .next()
-                .unwrap_or("0")
-                .to_string();
-            (tick_str, entry[b + 2..].to_string())
+            let after_prefix = &entry[a + "Такт ".len()..b];
+            (after_prefix.trim().to_string(), entry[b + 2..].to_string())
+        } else if let (Some(a), Some(b)) = (entry.find("Tick "), entry.find(": ")) {
+            let after_prefix = &entry[a + "Tick ".len()..b];
+            (after_prefix.trim().to_string(), entry[b + 2..].to_string())
         } else {
             ("0".to_string(), entry.clone())
         };
@@ -155,32 +172,9 @@ pub fn download_csv(log: &[String]) {
         ));
     }
 
-    let parts = web_sys::js_sys::Array::new();
-    parts.push(&wasm_bindgen::JsValue::from_str(&csv_content));
-
-    let opts = web_sys::BlobPropertyBag::new();
-    opts.set_type("text/csv;charset=utf-8");
-
-    let blob = web_sys::Blob::new_with_str_sequence_and_options(&parts, &opts)
-        .expect("не удалось создать Blob");
-
-    let url =
-        web_sys::Url::create_object_url_with_blob(&blob).expect("не удалось создать Object URL");
-
-    let document = web_sys::window()
-        .expect("Нет window")
-        .document()
-        .expect("Нет document");
-
-    let anchor = document
-        .create_element("a")
-        .expect("Не удалось создать элемент \"a\"")
-        .dyn_into::<web_sys::HtmlAnchorElement>()
-        .expect("Не HtmlAnchorElement");
-
-    anchor.set_href(&url);
-    anchor.set_download("simulation_report.csv");
-    anchor.click();
-
-    web_sys::Url::revoke_object_url(&url).unwrap();
+    download_blob(
+        &csv_content,
+        "text/csv;charset=utf-8",
+        "simulation_report.csv",
+    );
 }

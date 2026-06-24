@@ -2,13 +2,26 @@ use axum::{
     Json, Router,
     extract::Path,
     http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
 };
+use serde::Serialize;
 use serde_json::Value;
 use tokio::net::TcpListener;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 
 const TASKS_DIR: &str = "tasks";
+
+#[derive(Serialize)]
+struct ValidationError {
+    errors: Vec<String>,
+}
+
+impl IntoResponse for ValidationError {
+    fn into_response(self) -> axum::response::Response {
+        (StatusCode::BAD_REQUEST, Json(self)).into_response()
+    }
+}
 
 async fn list_tasks() -> Result<Json<Vec<String>>, StatusCode> {
     let mut entries = tokio::fs::read_dir(TASKS_DIR).await.map_err(|e| {
@@ -25,10 +38,10 @@ async fn list_tasks() -> Result<Json<Vec<String>>, StatusCode> {
     {
         let path = entry.path();
 
-        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
-            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                tasks_ids.push(stem.to_string());
-            }
+        if path.extension().and_then(|ext| ext.to_str()) == Some("json")
+            && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+        {
+            tasks_ids.push(stem.to_string());
         }
     }
 
@@ -36,7 +49,8 @@ async fn list_tasks() -> Result<Json<Vec<String>>, StatusCode> {
 }
 
 async fn get_task(Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
-    if id.contains("..") || id.contains("/") {
+    let id = id.replace('\\', "/");
+    if id.contains("..") || id.contains('/') || id.contains('\0') {
         tracing::warn!("Подозрительный id: \"{id}\"");
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -56,26 +70,40 @@ async fn get_task(Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
     Ok(Json(json))
 }
 
-async fn validate_task(Json(payload): Json<Value>) -> Result<StatusCode, StatusCode> {
+async fn validate_task(
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, axum::response::Response> {
     let schema_str = tokio::fs::read_to_string("task.schema.json")
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("Не удалось прочитать task.schema.json: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        })?;
 
-    let schema_json =
-        serde_json::from_str(&schema_str).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let schema_json = serde_json::from_str(&schema_str).map_err(|e| {
+        tracing::error!("Не удалось распарсить schema JSON: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    })?;
 
-    let compiled_schema = jsonschema::JSONSchema::compile(&schema_json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let compiled_schema = jsonschema::JSONSchema::compile(&schema_json).map_err(|e| {
+        tracing::error!("Не удалось скомпилировать JSON Schema: {e}");
+        StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    })?;
 
     if let Err(errors) = compiled_schema.validate(&payload) {
-        for error in errors {
-            tracing::warn!("Ошибка валидации: {}", error);
+        let details: Vec<String> = errors.map(|e| e.to_string()).collect();
+        for error in &details {
+            tracing::warn!("Ошибка валидации: {error}");
         }
 
-        return Err(StatusCode::BAD_REQUEST);
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ValidationError { errors: details }),
+        )
+            .into_response());
     }
 
-    Ok(StatusCode::OK)
+    Ok(Json(serde_json::json!({"status": "ok"})))
 }
 
 #[tokio::main]
@@ -84,8 +112,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/api/tasks", get(list_tasks))
-        .route("/api/tasks/{id}", get(get_task))
         .route("/api/tasks/validate", post(validate_task))
+        .route("/api/tasks/{id}", get(get_task))
         .layer(CorsLayer::permissive())
         .fallback_service(ServeDir::new("crates/frontend/dist"));
 

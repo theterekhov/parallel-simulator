@@ -25,13 +25,23 @@
 		},
 		"initial_state": {
 			"type": "object",
-			"required": ["threads", "resources"],
+			"required": ["current_tick", "is_deadlocked", "strategy", "threads", "resources"],
 			"properties": {
 				"current_tick": { "type": "integer", "minimum": 0 },
 				"is_deadlocked": { "type": "boolean" },
 				"strategy": {
 					"type": "string",
 					"enum": ["CPthreads", "PythonGil", "GoChannels"]
+				},
+				"starvation_threshold": {
+					"type": "integer",
+					"minimum": 1,
+					"description": "Порог голодания (тактов ожидания до предупреждения)"
+				},
+				"event_log": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "Журнал событий симуляции"
 				},
 				"threads": {
 					"type": "array",
@@ -48,7 +58,7 @@
 	"definitions": {
 		"thread": {
 			"type": "object",
-			"required": ["id", "priority", "status", "steps"],
+			"required": ["id", "priority", "status", "current_step_index", "steps"],
 			"properties": {
 				"id": { "type": "integer", "minimum": 1 },
 				"priority": { "type": "integer", "minimum": 1 },
@@ -57,6 +67,16 @@
 					"enum": ["New", "Ready", "Running", "Blocked", "Terminated"]
 				},
 				"current_step_index": { "type": "integer", "minimum": 0 },
+				"wait_start_tick": {
+					"type": ["integer", "null"],
+					"minimum": 0,
+					"description": "Такт начала ожидания ресурса (null = не ожидает)"
+				},
+				"last_ready_tick": {
+					"type": "integer",
+					"minimum": 0,
+					"description": "Последний такт в состоянии Ready"
+				},
 				"steps": {
 					"type": "array",
 					"items": { "$ref": "#/definitions/step" }
@@ -78,8 +98,8 @@
 				},
 				"duration": {
 					"type": "integer",
-					"minimum": 1,
-					"description": "Тактов для выполнения"
+					"minimum": 0,
+					"description": "Тактов для выполнения (0 = шаг завершён)"
 				}
 			}
 		},

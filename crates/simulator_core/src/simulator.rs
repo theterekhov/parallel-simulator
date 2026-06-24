@@ -124,7 +124,10 @@ impl Simulator {
             return;
         };
 
-        let res_id = res_id_str.parse().unwrap_or(0);
+        let Ok(res_id) = res_id_str.parse::<u32>() else {
+            self.state.threads[thread_idx].current_step_index += 1;
+            return;
+        };
 
         let resource_status = self
             .state
@@ -178,7 +181,9 @@ impl Simulator {
         let Some(res_id_str) = target else {
             return;
         };
-        let res_id = res_id_str.parse().unwrap_or(0);
+        let Ok(res_id) = res_id_str.parse::<u32>() else {
+            return;
+        };
 
         if let Some(res) = self.state.resources.iter_mut().find(|r| r.id == res_id) {
             res.owners.retain(|&id| id != thread_id);
@@ -194,21 +199,19 @@ impl Simulator {
             }
 
             let step_idx = thread.current_step_index;
-            if let Some(step) = thread.steps.get(step_idx) {
-                if step.action == "lock" {
-                    if let Some(t_target) = &step.target {
-                        if t_target.parse::<u32>().unwrap_or(u32::MAX) == res_id {
-                            thread.status = ThreadStatus::Ready;
-                            thread.wait_start_tick = None;
+            if let Some(step) = thread.steps.get(step_idx)
+                && step.action == "lock"
+                && let Some(t_target) = &step.target
+                && t_target.parse::<u32>().unwrap_or(u32::MAX) == res_id
+            {
+                thread.status = ThreadStatus::Ready;
+                thread.wait_start_tick = None;
 
-                            let waked_id = thread.id;
+                let waked_id = thread.id;
 
-                            self.state.event_log.push(format!(
-                                "[SCHEDULER] Такт {tick}: Поток #{waked_id} разблокирован"
-                            ));
-                        }
-                    }
-                }
+                self.state.event_log.push(format!(
+                    "[SCHEDULER] Такт {tick}: Поток #{waked_id} разблокирован"
+                ));
             }
         }
     }
@@ -223,12 +226,12 @@ impl Simulator {
         let mut deadlocked = false;
 
         for start_idx in 0..n {
-            if !visited[start_idx] && self.state.threads[start_idx].status == ThreadStatus::Blocked
+            if !visited[start_idx]
+                && self.state.threads[start_idx].status == ThreadStatus::Blocked
+                && Self::dfs_has_cycle(&self.state, start_idx, &mut visited, &mut in_stack)
             {
-                if Self::dfs_has_cycle(&self.state, start_idx, &mut visited, &mut in_stack) {
-                    deadlocked = true;
-                    break;
-                }
+                deadlocked = true;
+                break;
             }
         }
 
@@ -252,7 +255,7 @@ impl Simulator {
         visited[thread_idx] = true;
         in_stack[thread_idx] = true;
 
-        if let Some(next_idx) = Self::get_wait_for_idx(state, thread_idx) {
+        for &next_idx in &Self::get_wait_for_indices(state, thread_idx) {
             if !visited[next_idx] {
                 if Self::dfs_has_cycle(state, next_idx, visited, in_stack) {
                     return true;
@@ -266,24 +269,37 @@ impl Simulator {
         false
     }
 
-    fn get_wait_for_idx(state: &SystemState, thread_idx: usize) -> Option<usize> {
+    fn get_wait_for_indices(state: &SystemState, thread_idx: usize) -> Vec<usize> {
         let thread = &state.threads[thread_idx];
 
         if thread.status != ThreadStatus::Blocked {
-            return None;
+            return Vec::new();
         }
 
-        let step = thread.steps.get(thread.current_step_index)?;
+        let Some(step) = thread.steps.get(thread.current_step_index) else {
+            return Vec::new();
+        };
 
         if step.action != "lock" {
-            return None;
+            return Vec::new();
         }
 
-        let res_id = step.target.as_ref()?.parse::<u32>().ok()?;
-        let res = state.resources.iter().find(|r| r.id == res_id)?;
-        let owner_id = *res.owners.first()?;
+        let Some(target) = &step.target else {
+            return Vec::new();
+        };
 
-        state.threads.iter().position(|t| t.id == owner_id)
+        let Ok(res_id) = target.parse::<u32>() else {
+            return Vec::new();
+        };
+
+        let Some(res) = state.resources.iter().find(|r| r.id == res_id) else {
+            return Vec::new();
+        };
+
+        res.owners
+            .iter()
+            .filter_map(|&owner_id| state.threads.iter().position(|t| t.id == owner_id))
+            .collect()
     }
 
     fn check_scheduling_issues(&mut self) {
@@ -299,10 +315,13 @@ impl Simulator {
                 let wait_duration = tick.saturating_sub(wait_start);
 
                 if wait_duration > threshold {
-                    self.state.event_log.push(format!(
+                    let msg = format!(
                         "[WARNING] Такт {tick}: Поток #{} голодание ({} тактов)",
                         thread.id, wait_duration
-                    ));
+                    );
+                    if self.state.event_log.last().is_none_or(|last| *last != msg) {
+                        self.state.event_log.push(msg);
+                    }
                 }
             }
         }
@@ -327,17 +346,20 @@ impl Simulator {
                 })
                 .and_then(|t| t.parse::<u32>().ok());
 
-            if let Some(res_id) = waiting_res_id {
-                if let Some(res) = self.state.resources.iter().find(|r| r.id == res_id) {
-                    for owner_id in &res.owners {
-                        if let Some(owner) = self.state.threads.iter().find(|t| t.id == *owner_id) {
-                            if owner.priority < high_prio {
-                                self.state.event_log.push(format!(
-                                    "[WARNING] Такт {tick}: Инверсия! \
+            if let Some(res_id) = waiting_res_id
+                && let Some(res) = self.state.resources.iter().find(|r| r.id == res_id)
+            {
+                for owner_id in &res.owners {
+                    if let Some(owner) = self.state.threads.iter().find(|t| t.id == *owner_id)
+                        && owner.priority < high_prio
+                    {
+                        let msg = format!(
+                            "[WARNING] Такт {tick}: Инверсия! \
                  Поток #{} (Prio: {}) ждет #{} (Prio: {})",
-                                    high_id, high_prio, owner.id, owner.priority
-                                ));
-                            }
+                            high_id, high_prio, owner.id, owner.priority
+                        );
+                        if self.state.event_log.last().is_none_or(|last| *last != msg) {
+                            self.state.event_log.push(msg);
                         }
                     }
                 }

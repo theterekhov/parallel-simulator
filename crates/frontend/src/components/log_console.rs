@@ -37,11 +37,10 @@ pub fn LogConsole() -> impl IntoView {
                     <select
                         class="export-format-select"
                         on:change=move |ev| {
-                            if let Some(target) = ev.target() {
-                                if let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
+                            if let Some(target) = ev.target()
+                                && let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
                                     export_format.set(select.value());
                                 }
-                            }
                         }
                         prop:value=move || export_format.get()
                     >
@@ -72,7 +71,7 @@ pub fn LogConsole() -> impl IntoView {
                                                 "log-entry log-entry-error"
                                             } else if entry.contains("WARNING") || entry.contains("голодание") {
                                                 "log-entry log-entry-warning"
-                                            } else if entry.contains("Terminated") || entry.contains("завершен") {
+                                            } else if entry.contains("Terminated") || entry.contains("завершил") {
                                                 "log-entry log-entry-success"
                                             } else if entry.contains("Running") {
                                                 "log-entry log-entry-running"
