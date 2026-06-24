@@ -15,6 +15,7 @@
 ## Быстрый старт
 
 ```bash
+
 # зависимости
 rustup target add wasm32-unknown-unknown
 cargo install trunk
@@ -22,6 +23,7 @@ cargo install trunk
 # сборка и запуск
 make run
 # → http://localhost:3000
+
 ```
 
 Для разработки в двух терминалах:
