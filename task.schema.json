@@ -1,0 +1,109 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "Task Configuration",
+	"type": "object",
+	"required": ["metadata", "environment", "initial_state"],
+	"properties": {
+		"metadata": {
+			"type": "object",
+			"required": ["title", "description"],
+			"properties": {
+				"title": { "type": "string" },
+				"description": { "type": "string" }
+			}
+		},
+		"environment": {
+			"type": "object",
+			"required": ["threads"],
+			"properties": {
+				"threads": {
+					"type": "integer",
+					"minimum": 1,
+					"description": "Количество потоков в симуляции"
+				}
+			}
+		},
+		"initial_state": {
+			"type": "object",
+			"required": ["threads", "resources"],
+			"properties": {
+				"current_tick": { "type": "integer", "minimum": 0 },
+				"is_deadlocked": { "type": "boolean" },
+				"strategy": {
+					"type": "string",
+					"enum": ["CPthreads", "PythonGil", "GoChannels"]
+				},
+				"threads": {
+					"type": "array",
+					"items": { "$ref": "#/definitions/thread" }
+				},
+				"resources": {
+					"type": "array",
+					"items": { "$ref": "#/definitions/resource" }
+				}
+			}
+		}
+	},
+
+	"definitions": {
+		"thread": {
+			"type": "object",
+			"required": ["id", "priority", "status", "steps"],
+			"properties": {
+				"id": { "type": "integer", "minimum": 1 },
+				"priority": { "type": "integer", "minimum": 1 },
+				"status": {
+					"type": "string",
+					"enum": ["New", "Ready", "Running", "Blocked", "Terminated"]
+				},
+				"current_step_index": { "type": "integer", "minimum": 0 },
+				"steps": {
+					"type": "array",
+					"items": { "$ref": "#/definitions/step" }
+				}
+			}
+		},
+
+		"step": {
+			"type": "object",
+			"required": ["action", "duration"],
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["compute", "lock", "unlock"]
+				},
+				"target": {
+					"type": ["string", "null"],
+					"description": "ID ресурса для lock/unlock"
+				},
+				"duration": {
+					"type": "integer",
+					"minimum": 1,
+					"description": "Тактов для выполнения"
+				}
+			}
+		},
+
+		"resource": {
+			"type": "object",
+			"required": ["id", "res_type", "capacity"],
+			"properties": {
+				"id": { "type": "integer", "minimum": 1 },
+				"res_type": {
+					"type": "string",
+					"enum": ["Mutex", "Semaphore"]
+				},
+				"capacity": {
+					"type": "integer",
+					"minimum": 1,
+					"description": "1 для Mutex, N для Semaphore"
+				},
+				"owners": {
+					"type": "array",
+					"items": { "type": "integer" },
+					"description": "ID потоков, владеющих ресурсом"
+				}
+			}
+		}
+	}
+}

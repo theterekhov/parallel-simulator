@@ -1,0 +1,87 @@
+{
+	"metadata": {
+		"title": "Обедающие философы",
+		"description": "Классическая задача о 5 философах и 5 вилках. Философ 5 берёт вилки в обратном порядке — круговое ожидание."
+	},
+	"environment": { "threads": 5 },
+	"initial_state": {
+		"current_tick": 0,
+		"is_deadlocked": false,
+		"event_log": [],
+		"strategy": "CPthreads",
+		"threads": [
+			{
+				"id": 1,
+				"priority": 1,
+				"status": "Ready",
+				"current_step_index": 0,
+				"steps": [
+					{ "action": "lock", "target": "1", "duration": 1 },
+					{ "action": "lock", "target": "2", "duration": 1 },
+					{ "action": "compute", "target": null, "duration": 3 },
+					{ "action": "unlock", "target": "2", "duration": 1 },
+					{ "action": "unlock", "target": "1", "duration": 1 }
+				]
+			},
+			{
+				"id": 2,
+				"priority": 1,
+				"status": "Ready",
+				"current_step_index": 0,
+				"steps": [
+					{ "action": "lock", "target": "2", "duration": 1 },
+					{ "action": "lock", "target": "3", "duration": 1 },
+					{ "action": "compute", "target": null, "duration": 3 },
+					{ "action": "unlock", "target": "3", "duration": 1 },
+					{ "action": "unlock", "target": "2", "duration": 1 }
+				]
+			},
+			{
+				"id": 3,
+				"priority": 1,
+				"status": "Ready",
+				"current_step_index": 0,
+				"steps": [
+					{ "action": "lock", "target": "3", "duration": 1 },
+					{ "action": "lock", "target": "4", "duration": 1 },
+					{ "action": "compute", "target": null, "duration": 3 },
+					{ "action": "unlock", "target": "4", "duration": 1 },
+					{ "action": "unlock", "target": "3", "duration": 1 }
+				]
+			},
+			{
+				"id": 4,
+				"priority": 1,
+				"status": "Ready",
+				"current_step_index": 0,
+				"steps": [
+					{ "action": "lock", "target": "4", "duration": 1 },
+					{ "action": "lock", "target": "5", "duration": 1 },
+					{ "action": "compute", "target": null, "duration": 3 },
+					{ "action": "unlock", "target": "5", "duration": 1 },
+					{ "action": "unlock", "target": "4", "duration": 1 }
+				]
+			},
+			{
+				"id": 5,
+				"priority": 1,
+				"status": "Ready",
+				"current_step_index": 0,
+				"steps": [
+					{ "action": "lock", "target": "5", "duration": 1 },
+					{ "action": "lock", "target": "1", "duration": 1 },
+					{ "action": "compute", "target": null, "duration": 3 },
+					{ "action": "unlock", "target": "1", "duration": 1 },
+					{ "action": "unlock", "target": "5", "duration": 1 }
+				]
+			}
+		],
+		"resources": [
+			{ "id": 1, "res_type": "Mutex", "capacity": 1, "owners": [] },
+			{ "id": 2, "res_type": "Mutex", "capacity": 1, "owners": [] },
+			{ "id": 3, "res_type": "Mutex", "capacity": 1, "owners": [] },
+			{ "id": 4, "res_type": "Mutex", "capacity": 1, "owners": [] },
+			{ "id": 5, "res_type": "Mutex", "capacity": 1, "owners": [] }
+		]
+	}
+}

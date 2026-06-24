@@ -1,0 +1,32 @@
+[package]
+name = "frontend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+console_error_panic_hook = "0.1.7"
+gloo-net = { version = "0.7.0", features = ["http"] }
+leptos = { version = "0.8.19", features = ["csr"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+simulator_core.workspace = true
+tracing-wasm = "0.2.1"
+wasm-bindgen = "0.2.125"
+wasm-bindgen-futures = "0.4.75"
+web-sys = {
+  version = "0.3.102",
+  features = [
+    "Blob",
+    "BlobPropertyBag",
+    "Document",
+    "Event",
+    "File",
+    "FileList",
+    "HtmlAnchorElement",
+    "HtmlInputElement",
+    "HtmlSelectElement",
+    "KeyboardEvent",
+    "Url",
+    "Window",
+  ]
+}

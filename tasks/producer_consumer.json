@@ -1,0 +1,39 @@
+{
+	"metadata": {
+		"title": "Производитель-Потребитель",
+		"description": "Один производитель, один потребитель. Семафор capacity=3 ограничивает буфер."
+	},
+	"environment": { "threads": 2 },
+	"initial_state": {
+		"current_tick": 0,
+		"is_deadlocked": false,
+		"event_log": [],
+		"strategy": "CPthreads",
+		"threads": [
+			{
+				"id": 1,
+				"priority": 1,
+				"status": "Ready",
+				"current_step_index": 0,
+				"steps": [
+					{ "action": "compute", "target": null, "duration": 2 },
+					{ "action": "lock", "target": "1", "duration": 1 },
+					{ "action": "compute", "target": null, "duration": 1 },
+					{ "action": "unlock", "target": "1", "duration": 1 }
+				]
+			},
+			{
+				"id": 2,
+				"priority": 1,
+				"status": "Ready",
+				"current_step_index": 0,
+				"steps": [
+					{ "action": "lock", "target": "1", "duration": 1 },
+					{ "action": "compute", "target": null, "duration": 4 },
+					{ "action": "unlock", "target": "1", "duration": 1 }
+				]
+			}
+		],
+		"resources": [{ "id": 1, "res_type": "Semaphore", "capacity": 3, "owners": [] }]
+	}
+}
