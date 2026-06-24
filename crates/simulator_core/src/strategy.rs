@@ -91,9 +91,10 @@ fn channels_pick(threads: &mut [Thread], tick: u64, log: &mut Vec<String>) -> Op
     for &i in &candidates {
         if i == idx {
             if threads[i].status != ThreadStatus::Running {
+                threads[i].last_ready_tick = tick;
                 log.push(format!(
-	            	"[SCHEDULER] Такт {tick}: Поток #{} получил квант (Go Channels - честное планирование)",threads[i].id
-	            ));
+                    "[SCHEDULER] Такт {tick}: Поток #{} получил квант (Go Channels - честное планирование)",threads[i].id
+                ));
             }
 
             threads[i].status = ThreadStatus::Running;
