@@ -78,8 +78,8 @@
 				},
 				"duration": {
 					"type": "integer",
-					"minimum": 1,
-					"description": "Тактов для выполнения"
+					"minimum": 0,
+					"description": "Тактов для выполнения (0 = шаг завершён)"
 				}
 			}
 		},

@@ -111,7 +111,11 @@ pub fn download_json(json_str: &str, filename: &str) {
 
     anchor.set_href(&url);
     anchor.set_download(filename);
+    anchor.style().set_css_text("display: none;");
+
+    document.body().unwrap().append_child(&anchor).unwrap();
     anchor.click();
+    document.body().unwrap().remove_child(&anchor).unwrap();
 
     web_sys::Url::revoke_object_url(&url).unwrap();
 }
@@ -120,12 +124,10 @@ pub fn download_csv(log: &[String]) {
     let mut csv_content = String::from("tick,type,message\n");
 
     for entry in log {
-        let (tick, msg) = if let (Some(a), Some(b)) = (entry.find("Такт "), entry.find(": ")) {
-            let tick_str = entry[a + 5..b]
-                .split_whitespace()
-                .next()
-                .unwrap_or("0")
-                .to_string();
+        let prefix = "Такт ";
+        let (tick, msg) = if let (Some(a), Some(b)) = (entry.find(prefix), entry.find(": ")) {
+            let after_prefix = &entry[a + prefix.len()..b];
+            let tick_str = after_prefix.trim().to_string();
             (tick_str, entry[b + 2..].to_string())
         } else {
             ("0".to_string(), entry.clone())
@@ -180,7 +182,11 @@ pub fn download_csv(log: &[String]) {
 
     anchor.set_href(&url);
     anchor.set_download("simulation_report.csv");
+    anchor.style().set_css_text("display: none;");
+
+    document.body().unwrap().append_child(&anchor).unwrap();
     anchor.click();
+    document.body().unwrap().remove_child(&anchor).unwrap();
 
     web_sys::Url::revoke_object_url(&url).unwrap();
 }

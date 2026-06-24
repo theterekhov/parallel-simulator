@@ -72,7 +72,7 @@ pub fn LogConsole() -> impl IntoView {
                                                 "log-entry log-entry-error"
                                             } else if entry.contains("WARNING") || entry.contains("голодание") {
                                                 "log-entry log-entry-warning"
-                                            } else if entry.contains("Terminated") || entry.contains("завершен") {
+                                            } else if entry.contains("Terminated") || entry.contains("завершил") {
                                                 "log-entry log-entry-success"
                                             } else if entry.contains("Running") {
                                                 "log-entry log-entry-running"

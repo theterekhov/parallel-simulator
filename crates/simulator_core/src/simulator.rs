@@ -252,7 +252,7 @@ impl Simulator {
         visited[thread_idx] = true;
         in_stack[thread_idx] = true;
 
-        if let Some(next_idx) = Self::get_wait_for_idx(state, thread_idx) {
+        for &next_idx in &Self::get_wait_for_indices(state, thread_idx) {
             if !visited[next_idx] {
                 if Self::dfs_has_cycle(state, next_idx, visited, in_stack) {
                     return true;
@@ -266,24 +266,37 @@ impl Simulator {
         false
     }
 
-    fn get_wait_for_idx(state: &SystemState, thread_idx: usize) -> Option<usize> {
+    fn get_wait_for_indices(state: &SystemState, thread_idx: usize) -> Vec<usize> {
         let thread = &state.threads[thread_idx];
 
         if thread.status != ThreadStatus::Blocked {
-            return None;
+            return Vec::new();
         }
 
-        let step = thread.steps.get(thread.current_step_index)?;
+        let Some(step) = thread.steps.get(thread.current_step_index) else {
+            return Vec::new();
+        };
 
         if step.action != "lock" {
-            return None;
+            return Vec::new();
         }
 
-        let res_id = step.target.as_ref()?.parse::<u32>().ok()?;
-        let res = state.resources.iter().find(|r| r.id == res_id)?;
-        let owner_id = *res.owners.first()?;
+        let Some(target) = &step.target else {
+            return Vec::new();
+        };
 
-        state.threads.iter().position(|t| t.id == owner_id)
+        let Ok(res_id) = target.parse::<u32>() else {
+            return Vec::new();
+        };
+
+        let Some(res) = state.resources.iter().find(|r| r.id == res_id) else {
+            return Vec::new();
+        };
+
+        res.owners
+            .iter()
+            .filter_map(|&owner_id| state.threads.iter().position(|t| t.id == owner_id))
+            .collect()
     }
 
     fn check_scheduling_issues(&mut self) {
