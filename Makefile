@@ -1,4 +1,4 @@
-.PHONY: build run dev dev-front dev-back check clean
+.PHONY: build run dev dev-front dev-back check test clean
 
 build:
 	@echo "Building frontend..."
@@ -22,7 +22,10 @@ dev-front:
 	cd crates/frontend && trunk serve
 
 check:
-	cargo check --workspace
+	cargo check --workspace --all-targets
+
+test:
+	cargo test --workspace
 
 clean:
 	cargo clean && rm -rf crates/frontend/dist
