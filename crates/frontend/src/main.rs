@@ -106,6 +106,20 @@ fn App() -> impl IntoView {
                 if !sim.is_finished() {
                     sim.tick();
                 }
+                if sim.is_finished() {
+                    show_report.set(Some(generate_report(sim)));
+                    let msg = if sim.state.is_deadlocked {
+                        "Обнаружена взаимная блокировка!"
+                    } else {
+                        "Симуляция успешно завершена"
+                    };
+                    let toast_type = if sim.state.is_deadlocked {
+                        ToastType::Warning
+                    } else {
+                        ToastType::Success
+                    };
+                    push_toast(toasts, msg, toast_type);
+                }
             }
         });
     };
@@ -125,13 +139,7 @@ fn App() -> impl IntoView {
                     }
                     "ArrowRight" => {
                         event.prevent_default();
-                        simulator.update(|opt| {
-                            if let Some(sim) = opt {
-                                if !sim.is_finished() {
-                                    sim.tick();
-                                }
-                            }
-                        });
+                        do_step();
                     }
                     "r" | "R" => {
                         event.prevent_default();
