@@ -184,7 +184,7 @@ fn App() -> impl IntoView {
                             on:click=move |_| do_step()
                             disabled=move || !can_step()
                       >
-                      "Шаг ->"
+                      "Шаг"
                       </button>
                       <button
                             class="btn-ctrl btn-reset"

@@ -1,4 +1,4 @@
-use leptos::reactive::{signal::RwSignal, traits::Update};
+use leptos::prelude::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ToastType {
