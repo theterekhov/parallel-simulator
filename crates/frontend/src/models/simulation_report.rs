@@ -39,7 +39,7 @@ pub fn generate_report(sim: &Simulator) -> SimulationReport {
 
     SimulationReport {
         status,
-        total_ticks: state.current_tick as u64,
+        total_ticks: state.current_tick,
         threads_completed,
         threads_total,
         deadlock_detected: state.is_deadlocked,
@@ -119,7 +119,7 @@ fn download_blob(content: &str, mime: &str, filename: &str) {
 
     anchor.set_href(&url);
     anchor.set_download(filename);
-    let _ = anchor.style().set_css_text("display: none;");
+    anchor.style().set_css_text("display: none;");
 
     if let Some(body) = document.body() {
         let _ = body.append_child(&anchor);
@@ -172,5 +172,9 @@ pub fn download_csv(log: &[String]) {
         ));
     }
 
-    download_blob(&csv_content, "text/csv;charset=utf-8", "simulation_report.csv");
+    download_blob(
+        &csv_content,
+        "text/csv;charset=utf-8",
+        "simulation_report.csv",
+    );
 }

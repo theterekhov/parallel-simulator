@@ -37,11 +37,10 @@ pub fn LogConsole() -> impl IntoView {
                     <select
                         class="export-format-select"
                         on:change=move |ev| {
-                            if let Some(target) = ev.target() {
-                                if let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
+                            if let Some(target) = ev.target()
+                                && let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
                                     export_format.set(select.value());
                                 }
-                            }
                         }
                         prop:value=move || export_format.get()
                     >

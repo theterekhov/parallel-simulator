@@ -75,27 +75,26 @@ pub fn generate_svg(sim: &Simulator) -> String {
         if t.status != ThreadStatus::Blocked {
             continue;
         }
-        if let Some(step) = t.steps.get(t.current_step_index) {
-            if step.action == "lock" {
-                if let Some(Ok(res_id)) = step.target.as_ref().map(|s| s.parse::<u32>()) {
-                    let t_cy = thread_pos
-                        .iter()
-                        .find(|&&(tid, _, _)| tid == t.id)
-                        .map(|&(_, cy, _)| cy);
-                    let r_cy = res_pos
-                        .iter()
-                        .find(|&&(rid, _)| rid == res_id)
-                        .map(|&(_, cy)| cy);
+        if let Some(step) = t.steps.get(t.current_step_index)
+            && step.action == "lock"
+            && let Some(Ok(res_id)) = step.target.as_ref().map(|s| s.parse::<u32>())
+        {
+            let t_cy = thread_pos
+                .iter()
+                .find(|&&(tid, _, _)| tid == t.id)
+                .map(|&(_, cy, _)| cy);
+            let r_cy = res_pos
+                .iter()
+                .find(|&&(rid, _)| rid == res_id)
+                .map(|&(_, cy)| cy);
 
-                    if let (Some(t_cy), Some(r_cy)) = (t_cy, r_cy) {
-                        let mx = (99 + 390) / 2;
-                        s += &format!(
-                            "<path d='M99,{t_cy} C{mx},{t_cy} {mx},{r_cy} 390,{r_cy}' \
+            if let (Some(t_cy), Some(r_cy)) = (t_cy, r_cy) {
+                let mx = (99 + 390) / 2;
+                s += &format!(
+                    "<path d='M99,{t_cy} C{mx},{t_cy} {mx},{r_cy} 390,{r_cy}' \
                                  fill='none' stroke='#ef4444' stroke-width='1.5' \
                                  stroke-dasharray='6,3' marker-end='url(#arr-r)'/>\n"
-                        );
-                    }
-                }
+                );
             }
         }
     }

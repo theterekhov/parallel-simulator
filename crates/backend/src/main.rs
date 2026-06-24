@@ -38,10 +38,10 @@ async fn list_tasks() -> Result<Json<Vec<String>>, StatusCode> {
     {
         let path = entry.path();
 
-        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
-            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                tasks_ids.push(stem.to_string());
-            }
+        if path.extension().and_then(|ext| ext.to_str()) == Some("json")
+            && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+        {
+            tasks_ids.push(stem.to_string());
         }
     }
 
@@ -96,7 +96,11 @@ async fn validate_task(
             tracing::warn!("Ошибка валидации: {error}");
         }
 
-        return Err((StatusCode::BAD_REQUEST, Json(ValidationError { errors: details })).into_response());
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ValidationError { errors: details }),
+        )
+            .into_response());
     }
 
     Ok(Json(serde_json::json!({"status": "ok"})))
