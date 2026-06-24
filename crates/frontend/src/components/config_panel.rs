@@ -290,12 +290,9 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
     };
 
     let on_strategy_change = move |event: Event| {
-        let target = event
-            .target()
-            .unwrap()
-            .dyn_into::<HtmlSelectElement>()
-            .unwrap();
-        let value = target.value();
+        let target = event.target().and_then(|t| t.dyn_into::<HtmlSelectElement>().ok());
+
+        let value = target.map(|t| t.value()).unwrap_or_default();
 
         simulator.update(|opt| {
             if let Some(sim) = opt {
