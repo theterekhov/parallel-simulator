@@ -60,6 +60,7 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
 
     let gen_template = RwSignal::new(String::from("philosophers"));
     let gen_count = RwSignal::new(5_u32);
+    let starvation_threshold = RwSignal::new(20_u64);
 
     let load_task = move |id: String| {
         is_auto_playing.set(false);
@@ -121,7 +122,9 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
             };
             error_msg.set(String::new());
 
-            simulator.set(Some(Simulator::from_state(state)));
+            let loaded_sim = Simulator::from_state(state);
+            starvation_threshold.set(loaded_sim.state.starvation_threshold);
+            simulator.set(Some(loaded_sim));
 
             push_toast(
                 toasts,
@@ -207,8 +210,11 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
                                                     error_msg.set(String::new());
                                                     is_auto_playing.set(false);
 
-                                                    simulator
-                                                        .set(Some(Simulator::from_state(state)));
+                                                    let imported_sim = Simulator::from_state(state);
+                                                    starvation_threshold.set(
+                                                        imported_sim.state.starvation_threshold,
+                                                    );
+                                                    simulator.set(Some(imported_sim));
 
                                                     push_toast(
                                                         toasts,
@@ -406,17 +412,84 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
                     ],
                 ));
             }
+        } else if template == "starvation" {
+            task_title.set(format!("Голодание потоков ({} пот.)", n));
+            task_desc.set("Высокая конкуренция за 1 Mutex - длительное ожидание.".to_string());
+
+            resources.push(create_mutex(1));
+            for i in 1..=n {
+                threads.push(create_thread(
+                    i,
+                    vec![
+                        create_step("compute", None, 2),
+                        create_step("lock", Some("1"), 1),
+                        create_step("compute", None, 8),
+                        create_step("unlock", Some("1"), 1),
+                    ],
+                ));
+            }
+        } else if template == "inversion" {
+            task_title.set("Инверсия приоритетов (3 потока)".to_string());
+            task_desc.set("Разные приоритеты, 1 Mutex - high-prio ждёт low-prio.".to_string());
+
+            resources.push(create_mutex(1));
+            threads.push(simulator_core::Thread {
+                id: 1,
+                priority: 3,
+                status: simulator_core::ThreadStatus::Ready,
+                current_step_index: 0,
+                wait_start_tick: None,
+                last_ready_tick: 0,
+                steps: vec![
+                    create_step("lock", Some("1"), 1),
+                    create_step("compute", None, 6),
+                    create_step("unlock", Some("1"), 1),
+                    create_step("lock", Some("1"), 1),
+                    create_step("compute", None, 6),
+                    create_step("unlock", Some("1"), 1),
+                ],
+            });
+            threads.push(simulator_core::Thread {
+                id: 2,
+                priority: 2,
+                status: simulator_core::ThreadStatus::Ready,
+                current_step_index: 0,
+                wait_start_tick: None,
+                last_ready_tick: 0,
+                steps: vec![
+                    create_step("lock", Some("1"), 1),
+                    create_step("compute", None, 4),
+                    create_step("unlock", Some("1"), 1),
+                ],
+            });
+            threads.push(simulator_core::Thread {
+                id: 3,
+                priority: 1,
+                status: simulator_core::ThreadStatus::Ready,
+                current_step_index: 0,
+                wait_start_tick: None,
+                last_ready_tick: 0,
+                steps: vec![
+                    create_step("lock", Some("1"), 1),
+                    create_step("compute", None, 10),
+                    create_step("unlock", Some("1"), 1),
+                ],
+            });
         }
 
         is_auto.set(false);
         error_msg.set(String::new());
-        sim.set(Some(Simulator::new(threads, resources)));
+        let mut sim_instance = Simulator::new(threads, resources);
+        sim_instance.state.starvation_threshold = starvation_threshold.get();
+        sim.set(Some(sim_instance));
 
         let template_name = match template.as_str() {
             "philosophers" => "Обедающие философы",
             "race" => "Состояние гонки",
             "producer" => "Производитель-потребитель",
             "readers" => "Читатели и писатели",
+            "starvation" => "Голодание потоков",
+            "inversion" => "Инверсия приоритетов",
             _ => "Сценарий",
         };
 
@@ -452,20 +525,21 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-size: 0.8rem; color: var(--muted);">"Порог голодания:"</span>
                 <span style="font-size: 0.8rem; font-weight: bold; color: var(--text);">
-                    {move || simulator.with(|opt| opt.as_ref().map(|s| s.state.starvation_threshold).unwrap_or(20))}
+                    {move || starvation_threshold.get()}
                 </span>
             </div>
 
             <input type="range" min="1" max="100" step="1"
-                prop:value={move || simulator.with(|opt| opt.as_ref().map(|s| s.state.starvation_threshold).unwrap_or(20).to_string())}
+                prop:value={move || starvation_threshold.get().to_string()}
                 on:input={move |ev| {
                     let val = ev.target().and_then(|t| t.dyn_into::<HtmlInputElement>().ok()).map(|i| i.value()).unwrap_or_default();
                     if let Ok(v) = val.parse::<u64>() {
-                       simulator.update(|opt| {
-                        if let Some(sim) = opt {
-                            sim.state.starvation_threshold = v.clamp(1, u64::MAX);
-                        }
-                    });
+                        starvation_threshold.set(v.clamp(1, u64::MAX));
+                        simulator.update(|opt| {
+                            if let Some(sim) = opt {
+                                sim.state.starvation_threshold = v.clamp(1, u64::MAX);
+                            }
+                        });
                     }
                 }}
                 style="width: 100%; margin-bottom: 15px;"
@@ -509,6 +583,8 @@ pub fn ConfigPanel(tasks: LocalResource<Option<Vec<String>>>) -> impl IntoView {
                 <option value="race">"Гонка за ресурс"</option>
                 <option value="producer">"Производитель-потребитель"</option>
                 <option value="readers">"Читатели и писатели"</option>
+                <option value="starvation">"Голодание потоков"</option>
+                <option value="inversion">"Инверсия приоритетов"</option>
             </select>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
