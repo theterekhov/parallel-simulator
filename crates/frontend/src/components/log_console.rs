@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
-use crate::models::{download_csv, download_report};
+use crate::models::simulation_report::{download_csv, download_report};
 
 #[component]
 pub fn LogConsole() -> impl IntoView {

@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
-use crate::models::{Toast, ToastType, remove_toast};
+use crate::models::toast::{Toast, ToastType, remove_toast};
 
 #[component]
 pub fn ToastContainer() -> impl IntoView {

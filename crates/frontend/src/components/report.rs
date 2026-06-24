@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::models::{SimulationReport, download_report};
+use crate::models::simulation_report::{SimulationReport, download_report};
 
 #[component]
 pub fn ReportModal() -> impl IntoView {
