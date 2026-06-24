@@ -124,7 +124,10 @@ impl Simulator {
             return;
         };
 
-        let res_id = res_id_str.parse().unwrap_or(0);
+        let Ok(res_id) = res_id_str.parse::<u32>() else {
+            self.state.threads[thread_idx].current_step_index += 1;
+            return;
+        };
 
         let resource_status = self
             .state
@@ -178,7 +181,9 @@ impl Simulator {
         let Some(res_id_str) = target else {
             return;
         };
-        let res_id = res_id_str.parse().unwrap_or(0);
+        let Ok(res_id) = res_id_str.parse::<u32>() else {
+            return;
+        };
 
         if let Some(res) = self.state.resources.iter_mut().find(|r| r.id == res_id) {
             res.owners.retain(|&id| id != thread_id);
@@ -312,10 +317,13 @@ impl Simulator {
                 let wait_duration = tick.saturating_sub(wait_start);
 
                 if wait_duration > threshold {
-                    self.state.event_log.push(format!(
+                    let msg = format!(
                         "[WARNING] Такт {tick}: Поток #{} голодание ({} тактов)",
                         thread.id, wait_duration
-                    ));
+                    );
+                    if self.state.event_log.last().map_or(true, |last| *last != msg) {
+                        self.state.event_log.push(msg);
+                    }
                 }
             }
         }
@@ -345,11 +353,14 @@ impl Simulator {
                     for owner_id in &res.owners {
                         if let Some(owner) = self.state.threads.iter().find(|t| t.id == *owner_id) {
                             if owner.priority < high_prio {
-                                self.state.event_log.push(format!(
+                                let msg = format!(
                                     "[WARNING] Такт {tick}: Инверсия! \
                  Поток #{} (Prio: {}) ждет #{} (Prio: {})",
                                     high_id, high_prio, owner.id, owner.priority
-                                ));
+                                );
+                                if self.state.event_log.last().map_or(true, |last| *last != msg) {
+                                    self.state.event_log.push(msg);
+                                }
                             }
                         }
                     }
