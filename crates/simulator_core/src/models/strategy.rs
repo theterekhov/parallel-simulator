@@ -13,7 +13,7 @@ impl Strategy {
         match self {
             Strategy::CPthreads => "C (Pthreads)",
             Strategy::PythonGil => "Python (GIL)",
-            Strategy::GoChannels => "Go (Channels",
+            Strategy::GoChannels => "Go (Channels)",
         }
     }
 }

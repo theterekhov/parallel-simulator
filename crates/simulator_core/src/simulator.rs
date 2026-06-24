@@ -13,7 +13,7 @@ impl Simulator {
                 threads,
                 resources,
                 event_log: vec![
-                    "[SYSTEM] Среда инициализирована успешно. Алгоритмы диспетчиризации загружены."
+                    "[SYSTEM] Среда инициализирована успешно. Алгоритмы диспетчеризации загружены."
                         .to_string(),
                 ],
                 strategy: Strategy::default(),
@@ -90,7 +90,7 @@ impl Simulator {
         }
 
         self.check_deadlock();
-        self.check_sheduling_issues();
+        self.check_scheduling_issues();
     }
 
     fn find_or_activate_thread(&mut self) -> Option<usize> {
@@ -204,7 +204,7 @@ impl Simulator {
                             let waked_id = thread.id;
 
                             self.state.event_log.push(format!(
-                                "[SHEDULER] Такт {tick}: Поток #{waked_id} разблокирован"
+                                "[SCHEDULER] Такт {tick}: Поток #{waked_id} разблокирован"
                             ));
                         }
                     }
@@ -286,7 +286,7 @@ impl Simulator {
         state.threads.iter().position(|t| t.id == owner_id)
     }
 
-    fn check_sheduling_issues(&mut self) {
+    fn check_scheduling_issues(&mut self) {
         let tick = self.state.current_tick;
         let threshold = self.state.starvation_threshold;
 
@@ -454,7 +454,7 @@ mod tests {
         assert!(sim.is_finished());
         assert!(
             sim.state.is_deadlocked,
-            "Симулятор должен был обнаружить взаимную блокирвоку"
+            "Симулятор должен был обнаружить взаимную блокировку"
         );
         assert_eq!(sim.state.threads[0].status, ThreadStatus::Blocked);
         assert_eq!(sim.state.threads[1].status, ThreadStatus::Blocked);
@@ -502,7 +502,7 @@ mod tests {
         assert_eq!(
             sim.state.resources[0].owners.len(),
             2,
-            "Семафор должен впустить  ровно 2 потока"
+            "Семафор должен впустить ровно 2 потока"
         );
 
         let blocked_count = sim

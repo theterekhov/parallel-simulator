@@ -31,7 +31,7 @@ fn pthreads_pick(threads: &mut [Thread], tick: u64, log: &mut Vec<String>) -> Op
         if i == idx {
             if threads[i].status != ThreadStatus::Running {
                 log.push(format!(
-                    "[SHEDULER] Такт {tick}: Поток #{} получил квант процессорного времени",
+                    "[SCHEDULER] Такт {tick}: Поток #{} получил квант процессорного времени",
                     threads[i].id,
                 ));
             }
@@ -39,7 +39,7 @@ fn pthreads_pick(threads: &mut [Thread], tick: u64, log: &mut Vec<String>) -> Op
             threads[i].status = ThreadStatus::Running;
         } else if threads[i].status == ThreadStatus::Running {
             log.push(format!(
-        	"[SHEDULER] Такт {tick}: Поток #{} принудительно вытеснен планировщиком (Round-Robin)", threads[i].id
+        	"[SCHEDULER] Такт {tick}: Поток #{} принудительно вытеснен планировщиком (Round-Robin)", threads[i].id
         ));
 
             threads[i].status = ThreadStatus::Ready;
@@ -64,7 +64,7 @@ fn gil_pick(threads: &mut [Thread], tick: u64, log: &mut Vec<String>) -> Option<
     threads[idx].status = ThreadStatus::Running;
 
     log.push(format!(
-        "[SHEDULER] Такт {tick}: Поток #{} захватил GIL и получил квант времени",
+        "[SCHEDULER] Такт {tick}: Поток #{} захватил GIL и получил квант времени",
         threads[idx].id
     ));
 
@@ -92,14 +92,14 @@ fn channels_pick(threads: &mut [Thread], tick: u64, log: &mut Vec<String>) -> Op
         if i == idx {
             if threads[i].status != ThreadStatus::Running {
                 log.push(format!(
-	            	"[SHEDULER] Такт {tick}: Поток #{} получил квант (Go Channels - честное планирование)",threads[i].id
+	            	"[SCHEDULER] Такт {tick}: Поток #{} получил квант (Go Channels - честное планирование)",threads[i].id
 	            ));
             }
 
             threads[i].status = ThreadStatus::Running;
         } else if threads[i].status == ThreadStatus::Running {
             log.push(format!(
-                "[SHEDULER] Такт {tick}: Поток #{} вытеснен (Go Channels)",
+                "[SCHEDULER] Такт {tick}: Поток #{} вытеснен (Go Channels)",
                 threads[i].id
             ));
 
