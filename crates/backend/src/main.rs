@@ -1,5 +1,3 @@
-use std::fs;
-
 use axum::{
     Json, Router,
     extract::Path,
@@ -13,14 +11,18 @@ use tower_http::{cors::CorsLayer, services::ServeDir};
 const TASKS_DIR: &str = "tasks";
 
 async fn list_tasks() -> Result<Json<Vec<String>>, StatusCode> {
-    let entries = fs::read_dir(TASKS_DIR).map_err(|e| {
+    let mut entries = tokio::fs::read_dir(TASKS_DIR).await.map_err(|e| {
         tracing::error!("Не удалось прочитать папку tasks/: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
     let mut tasks_ids = Vec::new();
 
-    for entry in entries.flatten() {
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
         let path = entry.path();
 
         if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
@@ -41,7 +43,7 @@ async fn get_task(Path(id): Path<String>) -> Result<Json<Value>, StatusCode> {
 
     let file_path = format!("{TASKS_DIR}/{id}.json");
 
-    let content = fs::read_to_string(&file_path).map_err(|_| {
+    let content = tokio::fs::read_to_string(&file_path).await.map_err(|_| {
         tracing::warn!("Файл не найден: {file_path}");
         StatusCode::NOT_FOUND
     })?;
@@ -85,13 +87,13 @@ async fn main() {
         .route("/api/tasks/{id}", get(get_task))
         .route("/api/tasks/validate", post(validate_task))
         .layer(CorsLayer::permissive())
-        .fallback_service(ServeDir::new("frontend/dist"));
+        .fallback_service(ServeDir::new("crates/frontend/dist"));
 
     let listener = TcpListener::bind("0.0.0.0:3000")
         .await
         .expect("Не удалось привязаться к порту 3000");
 
-    tracing::info!("Сервер запущен: https://0.0.0.0:3000");
+    tracing::info!("Сервер запущен: http://0.0.0.0:3000");
 
     axum::serve(listener, app)
         .await
